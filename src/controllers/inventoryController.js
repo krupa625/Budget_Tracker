@@ -13,10 +13,10 @@ const createInventoryItem = async (req, res) => {
       .status(STATUS_CODES.BadRequest)
       .json({ message: "Inventory already exists" });
   }
-  const iUserId = req.user.id;
+
   try {
     const item = await Inventory.create({
-      iUserId,
+   
       sType,
       sName,
       nQuantityAvailable,

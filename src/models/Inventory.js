@@ -1,10 +1,6 @@
 const mongoose = require("mongoose");
 const InventorySchema = new mongoose.Schema({
-  iUserId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
+ 
   sType: { type: String, required: true, trim: true },
   sName: { type: String, required: true, trim: true },
   nQuantityAvailable: { type: Number, required: true },

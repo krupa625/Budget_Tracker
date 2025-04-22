@@ -1,6 +1,8 @@
 const express = require("express");
 const { createInventoryItem } = require("../controllers/inventoryController");
 const router = express.Router();
-const { authenticate } = require("../middleware/auth");
-router.post("/add", authenticate, createInventoryItem);
+
+const { inventoryValidationRules } = require("../validators/validators");
+const validate = require("../middleware/validateResult");
+router.post("/add",inventoryValidationRules,validate,  createInventoryItem);
 module.exports = router;
