@@ -32,26 +32,42 @@ const createExpense = async (req, res) => {
     const currentExpense = inventoryItem.nPricePerUnit * nQuantityPurchased;
     const now = new Date();
 
-    
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(now);
     endOfDay.setHours(23, 59, 59, 999);
 
     const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay()); 
+    startOfWeek.setDate(now.getDate() - now.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999);
 
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const endOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999
+    );
 
     const [dailyExpenses, weeklyExpenses, monthlyExpenses] = await Promise.all([
-      Expense.find({ iUserId, dPurchaseDate: { $gte: startOfDay, $lte: endOfDay } }),
-      Expense.find({ iUserId, dPurchaseDate: { $gte: startOfWeek, $lte: endOfWeek } }),
-      Expense.find({ iUserId, dPurchaseDate: { $gte: startOfMonth, $lte: endOfMonth } }),
+      Expense.find({
+        iUserId,
+        dPurchaseDate: { $gte: startOfDay, $lte: endOfDay },
+      }),
+      Expense.find({
+        iUserId,
+        dPurchaseDate: { $gte: startOfWeek, $lte: endOfWeek },
+      }),
+      Expense.find({
+        iUserId,
+        dPurchaseDate: { $gte: startOfMonth, $lte: endOfMonth },
+      }),
     ]);
 
     const calcTotal = async (expenses) => {
@@ -69,10 +85,10 @@ const createExpense = async (req, res) => {
       calcTotal(monthlyExpenses),
     ]);
 
-   
     const dailyExceeded = totalDaily + currentExpense > budget.nDailyLimit;
     const weeklyExceeded = totalWeekly + currentExpense > budget.nWeeklyLimit;
-    const monthlyExceeded = totalMonthly + currentExpense > budget.nMonthlyLimit;
+    const monthlyExceeded =
+      totalMonthly + currentExpense > budget.nMonthlyLimit;
 
     if (dailyExceeded || weeklyExceeded || monthlyExceeded) {
       const suggestions = getSuggestions({
@@ -112,4 +128,36 @@ const createExpense = async (req, res) => {
   }
 };
 
-module.exports = { createExpense };
+const deleteUserExpense = async (req, res) => {
+  const itemId = req.params.id;
+  try {
+    const deleteExpense = await Expense.findByIdAndDelete(itemId);
+    if (!deleteExpense)
+      return res
+        .status(STATUS_CODES.NotFound)
+        .json({ message: "No user found" });
+    res.status(STATUS_CODES.OK).json({ message: "User's Expense  Deleted !" });
+  } catch (err) {
+    res
+      .status(STATUS_CODES.InternalServerError)
+      .json({ message: "Server error", error: error.message });
+  }
+};
+
+const getUserExpense = async (req, res) => {
+  const iUserId = req.params.id;
+
+  try {
+    const expense = await Expense.find({ iUserId });
+    if (!expense)
+      return res
+        .status(STATUS_CODES.NotFound)
+        .json({ message: "No expense found" });
+    res.status(STATUS_CODES.OK).json(expense);
+  } catch (error) {
+    res
+      .status(STATUS_CODES.InternalServerError)
+      .json({ message: "Server error", error: error.message });
+  }
+};
+module.exports = { createExpense, deleteUserExpense, getUserExpense };
