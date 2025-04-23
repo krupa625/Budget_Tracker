@@ -2,7 +2,7 @@ const express = require("express");
 const {
   createExpense,
   getUserExpense,
-  deleteUserExpense,
+  softDeleteUserExpense,
 } = require("../controllers/expenseController");
 const router = express.Router();
 const { authenticate } = require("../middleware/auth");
@@ -16,5 +16,5 @@ router.post(
   createExpense
 );
 router.get("/get/:id", getUserExpense);
-router.delete("/delete/:id", deleteUserExpense);
+router.delete("/delete/:id", softDeleteUserExpense);
 module.exports = router;

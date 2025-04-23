@@ -12,5 +12,5 @@ app.use("/healthcheck", (req, res) => {
 app.use("/api", route);
 
 app.listen(port, () => {
-  console.log(`server is Running.....${port}`);
+  console.log(`server is Running at http://localhost:${port}`);
 });

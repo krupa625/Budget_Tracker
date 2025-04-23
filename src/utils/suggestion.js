@@ -1,32 +1,28 @@
-function getSuggestions({
-  dailyExceeded,
-  weeklyExceeded,
-  monthlyExceeded,
-  inventoryItem,
-  currentExpense,
-  budget,
-}) {
+function getSuggestions({ exceedingItems, budget }) {
   const tips = [];
+  tips.push("Your current selection exceeds your budget limits. Here’s where it’s going over:");
 
-  if (dailyExceeded) {
-    tips.push(
-      `Try reducing your daily purchases. Your daily limit is ₹${budget.nDailyLimit}, but you're trying to spend ₹${currentExpense}.`
-    );
-  }
-  if (weeklyExceeded) {
-    tips.push(
-      `You've already spent much this week. Weekly limit: ₹${budget.nWeeklyLimit}.`
-    );
-  }
-  if (monthlyExceeded) {
-    tips.push(
-      `You may want to hold off until next month. Monthly budget is ₹${budget.nMonthlyLimit}.`
-    );
-  }
+  exceedingItems.forEach(({ item, nQuantityPurchased, currentExpense, newDailyTotal, newWeeklyTotal, newMonthlyTotal }) => {
+    let msg = `- Remove "${item.sName}" (₹${item.nPricePerUnit} per unit, Qty: ${nQuantityPurchased})`;
 
-  tips.push(
-    `Instead of "${inventoryItem.sName}", consider buying in smaller quantity or switching to a cheaper item.`
-  );
+    const exceedDetails = [];
+
+    if (newDailyTotal > budget.nDailyLimit) {
+      exceedDetails.push(`Daily (limit: ₹${budget.nDailyLimit}, after: ₹${newDailyTotal})`);
+    }
+    if (newWeeklyTotal > budget.nWeeklyLimit) {
+      exceedDetails.push(`Weekly (limit: ₹${budget.nWeeklyLimit}, after: ₹${newWeeklyTotal})`);
+    }
+    if (newMonthlyTotal > budget.nMonthlyLimit) {
+      exceedDetails.push(`Monthly (limit: ₹${budget.nMonthlyLimit}, after: ₹${newMonthlyTotal})`);
+    }
+
+    if (exceedDetails.length > 0) {
+      msg += ` → Exceeds: ${exceedDetails.join(", ")}`;
+    }
+
+    tips.push(msg);
+  });
 
   return tips;
 }

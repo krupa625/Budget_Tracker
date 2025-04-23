@@ -5,37 +5,18 @@ const { getSuggestions } = require("../utils/suggestion");
 const { STATUS_CODES } = require("../utils/statuscode");
 
 const createExpense = async (req, res) => {
-  const { inventoryItemId, nQuantityPurchased } = req.body;
+  const items = req.body.items;
   const iUserId = req.user.id;
 
   try {
-    const inventoryItem = await Inventory.findById(inventoryItemId);
-    if (!inventoryItem) {
-      return res.status(STATUS_CODES.BadRequest).json({
-        message: "Inventory item not found",
-      });
-    }
-
-    if (inventoryItem.nQuantityAvailable < nQuantityPurchased) {
-      return res.status(STATUS_CODES.BadRequest).json({
-        message: "Insufficient quantity in inventory",
-      });
-    }
-
     const budget = await Budget.findOne({ iUserId });
     if (!budget) {
-      return res.status(STATUS_CODES.NotFound).json({
-        message: "Budget not set for the user",
-      });
+      return res.status(STATUS_CODES.NotFound).json({ message: "Budget not set for the user" });
     }
 
-    const currentExpense = inventoryItem.nPricePerUnit * nQuantityPurchased;
     const now = new Date();
-
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(now);
-    endOfDay.setHours(23, 59, 59, 999);
+    const startOfDay = new Date(now.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(now.setHours(23, 59, 59, 999));
 
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay());
@@ -45,81 +26,125 @@ const createExpense = async (req, res) => {
     endOfWeek.setHours(23, 59, 59, 999);
 
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999
-    );
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    const [dailyExpenses, weeklyExpenses, monthlyExpenses] = await Promise.all([
-      Expense.find({
-        iUserId,
-        dPurchaseDate: { $gte: startOfDay, $lte: endOfDay },
-      }),
-      Expense.find({
-        iUserId,
-        dPurchaseDate: { $gte: startOfWeek, $lte: endOfWeek },
-      }),
-      Expense.find({
-        iUserId,
-        dPurchaseDate: { $gte: startOfMonth, $lte: endOfMonth },
-      }),
-    ]);
-
-    const calcTotal = async (expenses) => {
+    const fetchExpensesTotal = async (from, to) => {
+      const expenses = await Expense.find({ iUserId, dPurchaseDate: { $gte: from, $lte: to } });
       let total = 0;
-      for (let exp of expenses) {
+      for (const exp of expenses) {
         const item = await Inventory.findById(exp.inventoryItemId);
         if (item) total += item.nPricePerUnit * exp.nQuantityPurchased;
       }
       return total;
     };
 
-    const [totalDaily, totalWeekly, totalMonthly] = await Promise.all([
-      calcTotal(dailyExpenses),
-      calcTotal(weeklyExpenses),
-      calcTotal(monthlyExpenses),
+    let [totalDaily, totalWeekly, totalMonthly] = await Promise.all([
+      fetchExpensesTotal(startOfDay, endOfDay),
+      fetchExpensesTotal(startOfWeek, endOfWeek),
+      fetchExpensesTotal(startOfMonth, endOfMonth),
     ]);
 
-    const dailyExceeded = totalDaily + currentExpense > budget.nDailyLimit;
-    const weeklyExceeded = totalWeekly + currentExpense > budget.nWeeklyLimit;
-    const monthlyExceeded =
-      totalMonthly + currentExpense > budget.nMonthlyLimit;
+    const createdExpenses = [];
+    const exceedingItems = [];
+    const missingItems = [];
+    const insufficientItems = [];
+    let totalAmountSpent = 0;
 
-    if (dailyExceeded || weeklyExceeded || monthlyExceeded) {
-      const suggestions = getSuggestions({
-        dailyExceeded,
-        weeklyExceeded,
-        monthlyExceeded,
-        inventoryItem,
-        currentExpense,
-        budget,
+    for (const { inventoryItemId, nQuantityPurchased } of items) {
+      const inventoryItem = await Inventory.findById(inventoryItemId);
+
+      if (!inventoryItem) {
+        missingItems.push(inventoryItemId);
+        continue;
+      }
+
+      if (inventoryItem.nQuantityAvailable < nQuantityPurchased) {
+        insufficientItems.push({
+          itemName: inventoryItem.sName,
+          available: inventoryItem.nQuantityAvailable,
+          requested: nQuantityPurchased,
+        });
+        continue;
+      }
+
+      const currentExpense = inventoryItem.nPricePerUnit * nQuantityPurchased;
+
+      const newDailyTotal = totalDaily + currentExpense;
+      const newWeeklyTotal = totalWeekly + currentExpense;
+      const newMonthlyTotal = totalMonthly + currentExpense;
+
+      const dailyExceeded = newDailyTotal > budget.nDailyLimit;
+      const weeklyExceeded = newWeeklyTotal > budget.nWeeklyLimit;
+      const monthlyExceeded = newMonthlyTotal > budget.nMonthlyLimit;
+
+      if (dailyExceeded || weeklyExceeded || monthlyExceeded) {
+        exceedingItems.push({
+          item: inventoryItem,
+          nQuantityPurchased,
+          currentExpense,
+          newDailyTotal,
+          newWeeklyTotal,
+          newMonthlyTotal,
+        });
+        continue;
+      }
+
+      const expense = await Expense.create({
+        iUserId,
+        inventoryItemId,
+        nQuantityPurchased,
+        dPurchaseDate: new Date(),
       });
 
+      inventoryItem.nQuantityAvailable -= nQuantityPurchased;
+      await inventoryItem.save();
+
+      totalDaily += currentExpense;
+      totalWeekly += currentExpense;
+      totalMonthly += currentExpense;
+      totalAmountSpent += currentExpense;
+
+      createdExpenses.push(expense);
+    }
+
+    
+    if (missingItems.length > 0) {
       return res.status(STATUS_CODES.BadRequest).json({
-        message: "Expense exceeds your budget limit",
-        suggestions,
+        message: "Some items not found in inventory",
+        missingItems,
+        createdExpenses,
+        totalAmountSpent,
       });
     }
 
-    const expense = await Expense.create({
-      iUserId,
-      inventoryItemId,
-      nQuantityPurchased,
-      dPurchaseDate: now,
-    });
+  
+    if (insufficientItems.length > 0) {
+      return res.status(STATUS_CODES.BadRequest).json({
+        message: "Some items have insufficient quantity in inventory",
+        insufficientItems,
+        createdExpenses,
+        totalAmountSpent,
+      });
+    }
 
-    inventoryItem.nQuantityAvailable -= nQuantityPurchased;
-    await inventoryItem.save();
+    
+    if (exceedingItems.length > 0) {
+      const suggestions = getSuggestions({ exceedingItems, budget });
+      return res.status(STATUS_CODES.BadRequest).json({
+        message: "Some items exceed your budget limits",
+        suggestions,
+        createdExpenses,
+        totalAmountSpent,
+      });
+    }
 
+   
     return res.status(STATUS_CODES.Create).json({
-      message: "Expense created successfully",
-      expense,
+      message: "All expenses created successfully",
+      createdExpenses,
+      totalAmountSpent,
     });
+
   } catch (err) {
     console.error("Create Expense Error:", err.message);
     return res.status(STATUS_CODES.InternalServerError).json({
@@ -128,27 +153,36 @@ const createExpense = async (req, res) => {
   }
 };
 
-const deleteUserExpense = async (req, res) => {
+const softDeleteUserExpense = async (req, res) => {
   const itemId = req.params.id;
   try {
-    const deleteExpense = await Expense.findByIdAndDelete(itemId);
-    if (!deleteExpense)
+    const deletedExpense = await Expense.findByIdAndUpdate(
+      itemId,
+      { bIsDeleted: true },
+      { new: true }
+    );
+
+    if (!deletedExpense)
       return res
         .status(STATUS_CODES.NotFound)
-        .json({ message: "No user found" });
-    res.status(STATUS_CODES.OK).json({ message: "User's Expense  Deleted !" });
-  } catch (err) {
+        .json({ message: "No user expense found" });
+
+    res
+      .status(STATUS_CODES.OK)
+      .json({ message: "User's Expense deleted!" });
+  } catch (error) {
     res
       .status(STATUS_CODES.InternalServerError)
       .json({ message: "Server error", error: error.message });
   }
 };
 
+
 const getUserExpense = async (req, res) => {
   const iUserId = req.params.id;
 
   try {
-    const expense = await Expense.find({ iUserId });
+    const expense = await Expense.find({ iUserId, bIsDeleted: false });
     if (!expense)
       return res
         .status(STATUS_CODES.NotFound)
@@ -160,4 +194,4 @@ const getUserExpense = async (req, res) => {
       .json({ message: "Server error", error: error.message });
   }
 };
-module.exports = { createExpense, deleteUserExpense, getUserExpense };
+module.exports = { createExpense, softDeleteUserExpense, getUserExpense };
