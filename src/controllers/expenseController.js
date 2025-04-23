@@ -9,7 +9,7 @@ const createExpense = async (req, res) => {
   const iUserId = req.user.id;
 
   try {
-    const budget = await Budget.findOne({ iUserId });
+    const budget = await Budget.findOne({ iUserId }).populate('iUserId');
     if (!budget) {
       return res.status(STATUS_CODES.NotFound).json({ message: "Budget not set for the user" });
     }
@@ -182,7 +182,9 @@ const getUserExpense = async (req, res) => {
   const iUserId = req.params.id;
 
   try {
-    const expense = await Expense.find({ iUserId, bIsDeleted: false });
+    const expense = await Expense.find({ iUserId }).populate('iUserId').populate('inventoryItemId');
+    
+    
     if (!expense)
       return res
         .status(STATUS_CODES.NotFound)

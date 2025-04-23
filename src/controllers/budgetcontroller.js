@@ -58,7 +58,7 @@ const getUserBudget = async (req, res) => {
   const iUserId = req.user.id;
 
   try {
-    const budget = await Budget.findOne({ iUserId });
+    const budget = await Budget.findOne({ iUserId }).populate('iUserId');
     if (!budget)
       return res
         .status(STATUS_CODES.NotFound)
