@@ -34,7 +34,7 @@ const createOrUpdateBudget = async (req, res) => {
         message: "Budget for this month already exists.",
       });
     }
-    await Budget.deleteMany({ iUserId });
+    await Budget.deleteOne({ iUserId });
     const newBudget = await Budget.create({
       iUserId,
       nDailyLimit,
