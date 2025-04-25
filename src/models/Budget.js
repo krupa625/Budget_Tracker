@@ -19,6 +19,16 @@ const budgetSchema = new mongoose.Schema(
       required: true,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
+budgetSchema.virtual("oUser", {
+  foreignField: "_id",
+  localField: "iUserId",
+  justOne: true,
+  ref: "User",
+});
 module.exports = mongoose.model("Budget", budgetSchema);

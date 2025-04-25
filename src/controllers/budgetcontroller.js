@@ -58,7 +58,7 @@ const getUserBudget = async (req, res) => {
   const iUserId = req.user.id;
 
   try {
-    const budget = await Budget.findOne({ iUserId }).populate('iUserId');
+    const budget = await Budget.findOne({ iUserId }).populate("iUserId");
     if (!budget)
       return res
         .status(STATUS_CODES.NotFound)
@@ -70,7 +70,26 @@ const getUserBudget = async (req, res) => {
       .json({ message: "Server error", error: error.message });
   }
 };
+
+const getList = async (req, res) => {
+  try {
+    const budget = await Budget.find({}).populate("iUserId");
+    const budgetnew = await Budget.find({}).populate("oUser");
+    console.log(budgetnew);
+
+    if (!budget)
+      return res
+        .status(STATUS_CODES.NotFound)
+        .json({ message: "No budget found" });
+    res.status(STATUS_CODES.OK).json({ budget, budgetnew });
+  } catch (error) {
+    res
+      .status(STATUS_CODES.InternalServerError)
+      .json({ message: "Server error", error: error.message });
+  }
+};
 module.exports = {
   createOrUpdateBudget,
   getUserBudget,
+  getList,
 };
